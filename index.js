@@ -63,44 +63,45 @@ function startSelfPing() {
 
 // ─── Parse gateway BLE data into readings ───
 function parseGatewayPayload(raw) {
-  // The HCBG01 sends various pkt_type messages.
-  // We look for scan_report or stuff_card with device data.
   try {
-    const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    const msg = typeof raw === 'string' ? JSON.parse(raw) : raw;
 
     // If the gateway sends pre-formatted readings (custom firmware/config)
-    if (data.readings && Array.isArray(data.readings)) {
-      return { user_id: data.user_id || GATEWAY_USER_ID, readings: data.readings };
+    if (msg.readings && Array.isArray(msg.readings)) {
+      return { user_id: msg.user_id || GATEWAY_USER_ID, readings: msg.readings };
     }
 
-    // HCBG01 stuff_card format: array of device reports
-    if (data.pkt_type === 'stuff_card' && Array.isArray(data.devices)) {
-      const readings = data.devices.map(dev => ({
-        tag_mac: dev.mac || dev.addr || '',
-        temperature: dev.temperature ?? dev.temp ?? 0,
-        motion_state: dev.motion_state ?? dev.motion ?? 0,
-        rssi: dev.rssi ?? 0,
-        battery_mv: dev.battery_mv ?? dev.battery ?? dev.vbatt ?? 0,
+    // Skip heartbeat/state packets — no device data to forward
+    if (msg.pkt_type === 'state') {
+      return null;
+    }
+
+    // HCBG01 scan_report format:
+    // { pkt_type: "scan_report", gw_addr: "...", data: { dev_infos: [...] } }
+    if (msg.pkt_type === 'scan_report' || msg.pkt_type === 'stuff_card') {
+      // Device list is inside msg.data.dev_infos
+      const devList = msg.data?.dev_infos ?? msg.data?.devices ?? msg.devices ?? [];
+
+      if (!Array.isArray(devList) || devList.length === 0) {
+        return null;
+      }
+
+      const readings = devList.map(dev => ({
+        tag_mac:      dev.addr  || dev.mac  || '',
+        rssi:         dev.rssi  ?? 0,
+        temperature:  dev.temperature ?? dev.temp ?? null,
+        motion_state: dev.motion_state ?? dev.motion ?? null,
+        battery_mv:   dev.battery_mv ?? dev.battery ?? dev.vbatt ?? null,
+        name:         dev.name  || '',
+        raw_data:     dev.adv_data || dev.raw || '',
       })).filter(r => r.tag_mac);
 
-      return { user_id: GATEWAY_USER_ID, readings };
+      if (readings.length === 0) return null;
+
+      return { user_id: GATEWAY_USER_ID, gw_addr: msg.gw_addr, readings };
     }
 
-    // HCBG01 scan_report format
-    if (data.pkt_type === 'scan_report' && Array.isArray(data.devices)) {
-      const readings = data.devices.map(dev => ({
-        tag_mac: dev.mac || dev.addr || '',
-        temperature: dev.temperature ?? 0,
-        motion_state: dev.motion_state ?? 0,
-        rssi: dev.rssi ?? 0,
-        battery_mv: dev.battery_mv ?? 0,
-      })).filter(r => r.tag_mac);
-
-      return { user_id: GATEWAY_USER_ID, readings };
-    }
-
-    // Fallback: try to use the data as-is
-    console.log('[Bridge] Unknown payload format:', JSON.stringify(data).slice(0, 200));
+    console.log('[Bridge] Unknown payload format:', JSON.stringify(msg).slice(0, 200));
     return null;
   } catch (err) {
     console.error('[Bridge] Parse error:', err.message);
