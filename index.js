@@ -89,9 +89,9 @@ function parseGatewayPayload(raw) {
       const readings = devList.map(dev => ({
         tag_mac:      dev.addr  || dev.mac  || '',
         rssi:         dev.rssi  ?? 0,
-        temperature:  dev.temperature ?? dev.temp ?? null,
-        motion_state: dev.motion_state ?? dev.motion ?? null,
-        battery_mv:   dev.battery_mv ?? dev.battery ?? dev.vbatt ?? null,
+        temperature:  dev.temperature ?? dev.temp ?? 0,
+        motion_state: dev.motion_state ?? dev.motion ?? 0,
+        battery_mv:   dev.battery_mv ?? dev.battery ?? dev.vbatt ?? 0,
         name:         dev.name  || '',
         raw_data:     dev.adv_data || dev.raw || '',
       })).filter(r => r.tag_mac);
