@@ -1,0 +1,13 @@
+{
+  "name": "mqtt-bridge",
+  "version": "1.0.0",
+  "description": "MQTT-to-HTTP bridge for BLE gateway → Supabase edge function",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "mqtt": "^5.10.0",
+    "node-fetch": "^3.3.2"
+  }
+}
