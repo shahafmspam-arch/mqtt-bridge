@@ -158,7 +158,7 @@ client.on('connect', () => {
 client.on('message', async (topic, message) => {
   lastMqttMessage = new Date().toISOString();
   const raw = message.toString();
-  console.log(`[Bridge] MQTT message on ${topic}: ${raw.slice(0, 300)}`);
+  console.log(`[Bridge] MQTT message on ${topic}: ${raw.slice(0, 1000)}`);
 
   const payload = parseGatewayPayload(raw);
   if (payload && payload.readings?.length > 0) {
