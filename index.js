@@ -59,32 +59,30 @@ function startSelfPing() {
   }, PING_INTERVAL);
 }
 
-// ─── Decode temperature from tag adv_raw ─────────────────────────────────────
-// mTnA tag adv_raw format (hex string):
-// 02 01 06 15 16 4C AB 01 1E 64 00 [MAC 6 bytes] [temp_int] [temp_dec] ...
-// Byte[18] = integer part, Byte[19] = decimal part
-// e.g. 0x0F=15, 0x08=8 → 15.08°C
-function parseAdvTemperature(advRaw) {
+// ─── Decode sensor data from mTnA tag adv_raw ────────────────────────────────
+// byte[17]=voltage raw → battery_mv=bytes[17]*300  (0x0A=10 → 3000mV=3.0V)
+// byte[18]=temp integer, byte[19]=temp decimal     (0x0F=15, 0x16=22 → 15.22°C)
+// byte[23..24]=activity big-endian                 (0x0C,0xF1 → 3313)
+function parseAdvData(advRaw) {
   try {
-    if (!advRaw || advRaw.length < 40) return null;
+    if (!advRaw || advRaw.length < 50) return null;
     const bytes = [];
     for (let i = 0; i < advRaw.length; i += 2) {
       bytes.push(parseInt(advRaw.substr(i, 2), 16));
     }
-    if (bytes.length < 20) return null;
-
-    // Check for mTnA vendor prefix: AD type 0x16, UUID 0x4CAB
+    if (bytes.length < 25) return null;
     if (bytes[4] === 0x16 && bytes[5] === 0x4C && bytes[6] === 0xAB) {
-      const intPart = bytes[18];
-      const decPart = bytes[19];
-      const temp = intPart + decPart / 100;
-      if (temp >= 0 && temp <= 50) return parseFloat(temp.toFixed(2));
+      const temperature = parseFloat((bytes[18] + bytes[19] / 100).toFixed(2));
+      const battery_mv  = bytes[17] * 300;
+      const activity    = (bytes[23] << 8) | bytes[24];
+      return {
+        temperature: (temperature >= 0 && temperature <= 50) ? temperature : null,
+        battery_mv:  (battery_mv > 0) ? battery_mv : null,
+        activity:    (activity >= 0) ? activity : null,
+      };
     }
-
     return null;
-  } catch (e) {
-    return null;
-  }
+  } catch (e) { return null; }
 }
 
 // ─── Parse gateway payload ────────────────────────────────────────────────────
@@ -111,9 +109,10 @@ function parseGatewayPayload(raw) {
       const readings = devList.map(dev => ({
         tag_mac:      dev.addr  || dev.mac  || '',
         rssi:         dev.rssi  ?? 0,
-        temperature:  dev.temperature ?? dev.temp ?? parseAdvTemperature(dev.adv_raw) ?? 0,
+        temperature:  dev.temperature ?? dev.temp ?? parseAdvData(dev.adv_raw)?.temperature ?? 0,
         motion_state: dev.motion_state ?? dev.motion ?? 0,
-        battery_mv:   dev.battery_mv ?? dev.battery ?? dev.vbatt ?? dev.batt ?? 0,
+        battery_mv:   dev.battery_mv ?? dev.battery ?? dev.vbatt ?? dev.batt ?? parseAdvData(dev.adv_raw)?.battery_mv ?? 0,
+        daily_activity: parseAdvData(dev.adv_raw)?.activity ?? 0,
         name:         dev.name  || '',
       })).filter(r => r.tag_mac);
 
